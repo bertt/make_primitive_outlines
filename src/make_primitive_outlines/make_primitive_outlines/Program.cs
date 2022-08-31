@@ -1,11 +1,11 @@
 ﻿using make_primitive_outlines;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using SharpGLTF.Geometry;
 using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
-using SharpGLTF.Schema2;
 using System.Numerics;
 using VPOSNRM = SharpGLTF.Geometry.VertexTypes.VertexPositionNormal;
-
 
 var material1 = new MaterialBuilder()
     .WithDoubleSide(true)
@@ -18,9 +18,6 @@ var pivot1 = new NodeBuilder("Cube1").WithLocalTranslation(new Vector3(-5, 0, 0)
 var scene = new SceneBuilder();
 scene.AddRigidMesh(mesh, pivot1);
 var model = scene.ToGltf2();
-// model.SaveGLB("test.glb");
-
-// var model = SharpGLTF.Schema2.ModelRoot.Load("BoxWithPrimitiveOutline.gltf");
 
 var originalIndices = model.LogicalMeshes[0].Primitives[0].IndexAccessor.AsIndicesArray().ToArray();
 var INDICES_PER_QUAD = 6;
@@ -28,7 +25,7 @@ var quads = originalIndices.Count() / INDICES_PER_QUAD;
 
 var quadBytes = new List<byte>();
 
-for (var i=0;i<quads; i++)
+for (var i = 0; i < quads; i++)
 {
     var start_index = INDICES_PER_QUAD * i;
     var end_index = start_index + INDICES_PER_QUAD;
@@ -46,17 +43,27 @@ for (var i=0;i<quads; i++)
             c, a
     };
 
-    foreach(var item in quad_edges)
+    foreach (var item in quad_edges)
     {
         var bytes = BitConverter.GetBytes((UInt16)item).ToList();
         quadBytes.AddRange(bytes);
     }
 }
+var buffer = model.UseBufferView(quadBytes.ToArray());
 
-model.UseBuffer(quadBytes.ToArray());
-//model.MergeBuffers();
-// var settings = new WriteSettings { JsonIndented = true };
-// model.SaveGLTF("test1.gltf", settings);
-model.SaveGLB("test1.glb");
+var gltf = "test.gltf";
+model.SaveGLTF(gltf);
 
-// File.WriteAllBytes("outlines1.bin", quadBytes.ToArray());
+var o1 = JObject.Parse(File.ReadAllText(gltf));
+string[] extensionsUsed = new List<string>() { "CESIUM_primitive_outline" }.ToArray();
+o1.Add("extensionsUsed", JArray.FromObject(extensionsUsed));
+
+var ext = new Extensions();
+ext.CESIUM_primitive_outline = new CESIUM_Primitive_Outline() { indices = buffer.LogicalIndex };
+
+o1["meshes"][0]["primitives"][0]["extensions"] = JObject.FromObject(ext);
+
+var res = JsonConvert.SerializeObject(o1, Formatting.Indented);
+
+File.WriteAllText(gltf, res);
+var p = 0;
